@@ -148,5 +148,6 @@ const removeUserFromCourse = async (req, res) => {
 export {
     assignUserToCourse,
     getCourseParticipants,
-    getMyEnrollments
+    getMyEnrollments,
+    removeUserFromCourse
 }
