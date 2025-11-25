@@ -145,9 +145,79 @@ const removeUserFromCourse = async (req, res) => {
     }
 }
 
+const getCourseEnrollmentsSummary = async (req, res) => {
+    try {
+        const { courseId } = req.params;
+        if (!courseId) return res.status(400).json({ message: "CourseId is required" })
+
+        const course = await Course.findById(courseId)
+        if (!course) return res.status(404).json({ message: "Course not found" })
+
+        const enrollments = await CourseEnrollment.find({ course: courseId })
+            .populate("user", "fullName email role enrolledAt")
+            .lean()
+
+        if (enrollments.length === 0) {
+            return res.status(200).json({
+                message: "No enrollments found for this course",
+                course,
+                summary: {
+                    totalEnrollments: 0,
+                    managers: 0,
+                    teachers: 0,
+                    students: 0
+                },
+                participants: {
+                    students: [],
+                    teachers: [],
+                    managers: []
+                }
+            })
+        }
+
+        const participants = {
+            students: [],
+            teachers: [],
+            managers: []
+        }
+
+        enrollments.forEach((enroll) => {
+            const userData = {
+                _id: enroll.user._id,
+                fullName: enroll.user.fullName,
+                email: enroll.user.email,
+                role: enroll.user.role,
+                enrolledAt: enroll.enrolledAt
+            }
+            if (enroll.user.role === "student") participants.students.push(userData)
+            else if (enroll.user.role === "teachers") participants.teachers.push(userData)
+            else if (enroll.user.role    === "manager") participants.managers.push(userData)
+        })
+
+        const summary = {
+            totalEnrollments: enrollments.length,
+            students: participants.students.length,
+            teachers: participants.teachers.length,
+            managers: participants.managers.length
+        }
+
+        return res.status(200).json({
+            message: "Fetched course enrollment summary successfully",
+            course,
+            summary,
+            participants
+        })
+    } catch (error) {
+        console.error("Failed to fetch course enrollment summary:", error.message);
+        return res.status(500).json({ message: "Failed to fetch course enrollment summary" });
+    }
+}
+
+
 export {
     assignUserToCourse,
     getCourseParticipants,
     getMyEnrollments,
-    removeUserFromCourse
+    removeUserFromCourse,
+    getCourseEnrollmentsSummary
 }

@@ -21,10 +21,21 @@ const assignmentSchema = new mongoose.Schema({
         ref: "Course",
         required: true
     },
+    maxMarks: {
+        type: String,   
+        default: 100
+    },
+    attachments: [{
+        type: String
+    }],
     submissions: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: "Submission"
-    }]
+    }],
+    isPublished: {
+        type: Boolean,
+        default: false
+    }
 }, { timestamps: true })
 
 

@@ -26,6 +26,15 @@ const submissionSchema = new mongoose.Schema({
     submittedAt: {
         type: Date,
         default: Date.now
+    },
+    textAnswer: {
+        type: String,
+        default: ""
+    },
+    gradedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: null
     }
 }, { timestamps: true })
 
