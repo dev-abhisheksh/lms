@@ -1,33 +1,48 @@
 import { Course } from "../models/course.model.js";
 import { CourseEnrollment } from "../models/courseEnrollment.model.js";
 import { Module } from "../models/module.model.js";
+import { uploadToCloudinary } from "../utils/cloudinary.js";
 
 //create COURSE
 const createCourse = async (req, res) => {
     try {
-        const { title, description, thumbnail, isPublished, department, courseCode } = req.body;
-        if (!title || !description || !department || !courseCode) {
-            return res.status(400).json({ message: "All fields are required" })
+        const { title, description, courseCode, thumbnail } = req.body;
+        if (!title || !description || !courseCode) return res.status(400).json({ message: "Title, courseCode & description fields are required" })
+
+        //role check
+        if (req.user.role !== "admin") return res.status(403).json({ message: "Not authorized!" })
+
+        //courseCode dublication check
+        const existing = await Course.findOne({ courseCode })
+        if (existing) return res.status(409).json({ message: "Course with the courseCode already exists" })
+
+        let thumbnailMeta = null;
+        if (req.file) {
+            const uploaded = await uploadToCloudinary(req.file.buffer, "course_thumbnails")
+
+            thumbnailMeta = {
+                public_id: uploaded.public_id,
+                url: uploaded.url,
+                secure_url: uploaded.secure_url,
+                bytes: uploaded.bytes,
+                format: uploaded.format,
+                original_filename: uploaded.original_filename
+            }
         }
 
-        const newCourse = await Course.create({
-            title,
+        const course = await Course.create({
+            title: title.trim(),
             description: description.trim(),
-            thumbnail: thumbnail || "",
-            createdBy: req.user?._id, //comes after jwt verficetion,
-            isPublished: isPublished || false,
+            courseCode: courseCode.trim(),
             department: department.trim(),
-            courseCode,
-            modules: [],
-            studentsEnrolled: []
+            createdBy: req.user._id,
+            thumbnail: thumbnailMeta,
+            isPublished: true
         })
 
-        return res.status(201).json({
-            message: "Course created successfully",
-            course: newCourse
-        })
+        return res.status(201).json({ message: "Course created successfully" })
     } catch (error) {
-        console.log("Failed to create course: ", error.message)
+        console.error("Failed to create course", error.message)
         return res.status(500).json({ message: "Failed to create course" })
     }
 }
@@ -79,7 +94,7 @@ const getCourseById = async (req, res) => {
                 populate: { path: "lessons" }
             })
             .populate("createdBy", "fullName email role")
-            
+
         if (!course) {
             return res.status(404).json({ message: "Course not found" })
         }

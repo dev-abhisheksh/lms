@@ -6,15 +6,19 @@ const courseSchema = new mongoose.Schema({
         required: true,
         trim: true
     },
-    description: String,
+    description: {
+        type: String,
+        trim: true,
+        default: ""
+    },
     courseCode: {
         type: String,
         required: true,
-        unique: true,
-        sparse: true
+        unique: true
     },
     department: {
-        type: String,
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Department",
         required: true
     },
     thumbnail: String,
@@ -33,7 +37,6 @@ const courseSchema = new mongoose.Schema({
     }
 }, { timestamps: true })
 
-// courseSchema.index({ courseCode: 1 }, { unique: true });
-// courseSchema.index({ createdBy: 1 });
+courseSchema.index({ department: 1 })
 
 export const Course = mongoose.model("Course", courseSchema)

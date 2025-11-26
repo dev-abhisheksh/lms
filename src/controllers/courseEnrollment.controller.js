@@ -6,35 +6,39 @@ const assignUserToCourse = async (req, res) => {
     try {
         const { courseId } = req.params;
         const { userId, role } = req.body;
+        if (!courseId || !userId || !role) return res.status(400).json({ message: "CourseID, UserID and role are required" })
 
-        if (!userId || !role || !courseId) {
-            return res.status(400).json({ message: "courseId, userId, and role are required" });
-        }
-
-        const course = await Course.findById(courseId)
+        //checking of Course and User exisits in the DATABASE
+        const course = await Course.findById(courseId).select("title description department")
         if (!course) return res.status(404).json({ message: "Course not found" })
-        const user = await User.findById(userId)
+
+        const user = await User.findById(userId).select("fullName username email role")
         if (!user) return res.status(404).json({ message: "User not found" })
 
-        const validateRoles = ["teacher", "manager", "student"]
-        if (!validateRoles.includes(role)) return res.status(400).json({ message: "Invalid role. Must be student, teacher, or manager." });
+        //only admins and managers are allowed
+        if (req.user.role !== "admin" && req.user.role !== "manager") {
+            return res.status(403).json({ message: "Not authorized to Assign users to course" })
+        }
 
-        const existing = await CourseEnrollment.findOne({ user: userId, course: courseId }).lean();
-        if (existing) return res.status(400).json({ message: "User is already enrolled in the course" })
+        //only students and teachers can be enrolled
+        const allowedRoles = ["teacher", "student"];
+        if (!allowedRoles.includes(role)) {
+            return res.status(403).json({ message: "Role must be either student or teacher" })
+        }
 
-        const newEnrollment = await CourseEnrollment.create({
+        //prevent enrolled user to enroll again
+        const existingEnrollment = await CourseEnrollment.findOne({ user: userId, course: courseId })
+        if (existingEnrollment) return res.status(409).json({ message: "User is already enrolled in this course" })
+
+        const enrollment = await CourseEnrollment.create({
             user: userId,
             course: courseId,
             role
         })
 
-        const populatedEnrollment = await CourseEnrollment.findById(newEnrollment._id)
-            .populate("user", "fullName email role")
-            .populate("course", "title description")
-
         return res.status(201).json({
-            message: "User enrolled in the course successfully",
-            enrollment: populatedEnrollment
+            message: "User enrolled successfully",
+            enrollment
         })
     } catch (error) {
         console.error("Failed to enroll in the course", error.message);
@@ -191,7 +195,7 @@ const getCourseEnrollmentsSummary = async (req, res) => {
             }
             if (enroll.user.role === "student") participants.students.push(userData)
             else if (enroll.user.role === "teachers") participants.teachers.push(userData)
-            else if (enroll.user.role    === "manager") participants.managers.push(userData)
+            else if (enroll.user.role === "manager") participants.managers.push(userData)
         })
 
         const summary = {

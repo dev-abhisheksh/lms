@@ -6,35 +6,60 @@ const assignmentSchema = new mongoose.Schema({
         required: true,
         trim: true
     },
-    description: String,
+
+    description: {
+        type: String,
+        trim: true,
+        default: ""
+    },
+
     createdBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
         required: true
     },
+
     dueDate: {
         type: Date,
         required: true
     },
+
+    allowLate: {
+        type: Boolean,
+        default: true
+    },
+
     course: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Course",
         required: true
     },
+
     maxMarks: {
-        type: String,
+        type: Number,
         default: 100
     },
-    attachments: [{
-        type: String
-    }],
-    submissions: [{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Submission"
-    }],
+
+    attachments: [
+        {
+            public_id: String,
+            url: String,
+            secure_url: String,
+            bytes: Number,
+            format: String,
+            original_filename: String
+        }
+    ]
+    ,
+
     isPublished: {
         type: Boolean,
         default: false
+    },
+
+    publishedAt: {
+        type: Date,
+        default: null
     }
 }, { timestamps: true })
 
