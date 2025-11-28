@@ -41,17 +41,117 @@ const createDepartment = async (req, res) => {
 
 const getAllDepartments = async (req, res) => {
     try {
-        const departments = await Department.find({ isActive: true }).sort({ name: 1 })
+        let query = {};
+        if (req.user.role === "student" || req.user.role === "teacher" || req.user.role === "manager") {
+            query = { isActive: true }
+        }
+        const departments = await Department.find(query).sort({ name: 1 })
 
         return res.status(200).json({ message: "Fetched all departments", departments })
 
     } catch (error) {
-        console.error("Failed to fetch departments", error.message)
+        console.error("Failed to fetch departments", error)
         return res.status(500).json({ message: "Failed to fetch departments" })
+    }
+}
+
+const getDepartmentById = async (req, res) => {
+    try {
+        const { departmentId } = req.params;
+        if (!departmentId) return res.status(400).json({ message: "DepartmentId is required" })
+
+        const department = await Department.findById(departmentId)
+        if (!department) return res.status(404).json({ message: "Department not found" })
+
+        //role check : Only Admins
+        if ((req.user.role === "manager" ||
+            req.user.role === "teacher" ||
+            req.user.role === "student") &&
+            !department.isActive
+        ) return res.status(403).json({ message: "Not authorized to view this department" })
+
+        return res.status(200).json({
+            message: "Fetched department",
+            department
+        })
+
+    } catch (error) {
+        console.error("Failed to fetch department", error)
+        return res.status(500).json({ message: "Failed to fetch department" })
+    }
+}
+
+const toggleDepartment = async (req, res) => {
+    try {
+        const { departmentId } = req.params;
+        if (!departmentId) return res.status(400).json({ message: "DepartmentId is required" })
+
+        if (req.user.role !== "admin") return res.status(403).json({ message: "Not authorized" })
+
+        const department = await Department.findById(departmentId).select("name code isActive description createdBy")
+        if (!department) return res.status(404).json({ message: "Department not found" })
+
+        department.isActive = !department.isActive;
+        await department.save();
+
+        return res.status(200).json({
+            message: `Department "${department.name}" is now ${department.isActive ? "active" : "inactive"}.`,
+            department,
+        });
+    } catch (error) {
+        console.error("Toggle Department Error:", error);
+        return res.status(500).json({ message: "Failed to toggle department status" });
+    }
+}
+
+const updateDepartment = async (req, res) => {
+    try {
+        const { departmentId } = req.params;
+        const { name, description } = req.body;
+        if (!departmentId) return res.status(400).json({ message: "DepartmentID are required" })
+        if (!name && !description) return res.status(400).json({ message: "Atleast provide one field to update" })
+
+        //role check: Admins only
+        if (req.user.role !== "admin") return res.status(403).json({ message: "Not authorized" })
+
+        //department check
+        const existingDepartment = await Department.findById(departmentId)
+        if (!existingDepartment) return res.status(404).json({ message: "Department not found" })
+
+        //dublicate namr check
+        if (name) {
+            const nameExists = await Department.findOne({
+                _id: { $ne: departmentId },
+                name: name.trim()
+            })
+
+            if (nameExists) {
+                return res.status(409).json({ message: "Department name already exists" })
+            }
+        }
+        const updatedDepartment = await Department.findByIdAndUpdate(
+            departmentId,
+            {
+                ...(name && { name: name.trim() }),
+                ...(description && { description: description.trim() })
+            },
+            { new: true }
+        )
+
+        return res.status(200).json({
+            message: "Department updated successfully",
+            department: updatedDepartment
+        })
+    } catch (error) {
+        console.error("Failed to update department", error)
+        return res.status(500).json({ message: "Failed to update department" })
     }
 }
 
 export {
     createDepartment,
-    getAllDepartments
+    getAllDepartments,
+    getDepartmentById,
+    toggleDepartment,
+    updateDepartment
 }

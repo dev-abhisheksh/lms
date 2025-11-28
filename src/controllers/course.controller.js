@@ -56,36 +56,103 @@ const createCourse = async (req, res) => {
 //get ALL COURSES
 const getAllCourses = async (req, res) => {
     try {
-        const courses = await Course.find()
-            .populate("createdBy", "fullName email role")
-            .sort({ createdAt: -1 })
+        const { departmentId } = req.params;
+        const { search, page = 1, limit = 20 } = req.query;
+
+        let department = null;
+        if (departmentId) {
+            const department = await Department.findById(departmentId)
+            if (!department) return res.status(404).json({ message: "Department not found" })
+
+            if (req.user.role !== "admin" && !department.isActive) {
+                return res.status(403).json({ message: "Not authorized to view courses from this department" })
+            }
+        }
+
+        const query = {};
+        if (departmentId) query.department = departmentId;
+
+        if (req.user.role !== "admin") {
+            const activeDepartments = await Department.find({ isActive: true }).select("_id");
+            const activeDepartIDS = activeDepartments.map(e => e._id)
+            query.department = departmentId ? departmentId : { $in: activeDepartIDS }
+
+            if (req.user.role === "teacher") {
+                const teacherEnrollments = await CourseEnrollment.find({
+                    user: req.user._id,
+                    role: "teacher"
+                }).select("course")
+                const teacherCourseIds = teacherEnrollments.map(e => e.course)
+
+                query.$or = [
+                    { isPublished: true },
+                    { _id: { $in: teacherCourseIds } }
+                ];
+            } else {
+                query.isPublished = true
+            }
+        }
+
+        if (search && search.trim()) {
+            const re = new RegExp(search.trim(), "i");
+            query.$and = query.$and || [];
+            query.$and.push({ $or: [{ title: re }, { courseCode: re }] })
+        }
+
+        const skip = (Math.max(1, Number(page)) - 1) * Math.min(100, Number(limit))
+        const courses = await Course.find(query)
+            .populate("createdBy", "fullName email username")
+            .populate("department", "name code isActive")
+            .sort({ title: 1 })
+            .skip(slip)
+            .limit(Math.min(100, Number(limit)))
+
         return res.status(200).json({
-            message: "Fetched all courses",
+            message: "Courses fetched successfully",
+            meta: { page: Number(page), limit: Number(limit), count: courses.length },
             courses
-        })
+        });
     } catch (error) {
-        console.error("Failed to fetch all course", error.message)
-        return res.status(500).json({ message: "Failed to fetch all course" })
+        console.error("Get All Courses Error:", error);
+        return res.status(500).json({ message: "Failed to fetch courses" });
     }
 }
 
 const getMyCourse = async (req, res) => {
     try {
-        const { userId } = req.user._id;
-        if (!userId) {
-            return res.status(400).json({ message: "UserId not provided" })
-        }
+        const { departmentId, courseId } = req.query;
+        const filter = { user: req.user._id }
 
-        const myCourses = await Course.find({ createdBy: userId })
+        if (departmentId) filter.department = departmentId;
+        if (courseId) filter.course = courseId;
+
+        let enrollments = await CourseEnrollment.find(filter)
+            .populate("course", "title courseCode department isPublished")
             .sort({ createdAt: -1 })
 
+        if (req.user.role !== "admin") {
+            enrollments = enrollments.filter(en => en.department?.isActive)
+
+            if (req.user.role === "manager") {
+
+            }
+
+            if (req.user.role === "student") {
+                enrollments = enrollments.filter(en => en.course.isPublished)
+            }
+
+            if (req.user.role === "teacher") {
+
+            }
+        }
+
         return res.status(200).json({
-            message: "Fetched yr created courses",
-            count: myCourses.length,
-            courses: myCourses
+            message: "Fetched your courses successfully",
+            count: enrollments.length,
+            courses: enrollments
         })
     } catch (error) {
-        console.error("Failed to fetch teacher's courses:", error.message);
+        console.error("Failed to fetch your courses:", error.message);
         return res.status(500).json({ message: "Failed to fetch your courses" });
     }
 }
