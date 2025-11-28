@@ -121,14 +121,9 @@ const getAllCourses = async (req, res) => {
 const getMyCourse = async (req, res) => {
     try {
         const { departmentId, courseId } = req.query;
-
         const filter = { user: req.user._id };
 
-        if (courseId) filter.course = courseId;   // VALID
-        // ❌ departmentId should NOT go inside filter because enrollment has no department
-
-        const raw = await CourseEnrollment.find({ user: req.user._id });
-        console.log("RAW ENROLLMENTS:", JSON.stringify(raw, null, 2));
+        if (courseId) filter.course = courseId;
 
         let enrollments = await CourseEnrollment.find(filter)
             .populate({
@@ -141,22 +136,18 @@ const getMyCourse = async (req, res) => {
             })
             .sort({ createdAt: -1 });
 
-        // filter only after populate
         if (req.user.role !== "admin") {
 
-            // filter by department if provided
             if (departmentId) {
                 enrollments = enrollments.filter(
                     en => en.course?.department?._id.toString() === departmentId
                 );
             }
 
-            // filter out inactive departments
             enrollments = enrollments.filter(
                 en => en.course?.department?.isActive === true
             );
 
-            // students only see published courses
             if (req.user.role === "student") {
                 enrollments = enrollments.filter(
                     en => en.course?.isPublished === true
