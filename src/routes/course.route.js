@@ -1,7 +1,7 @@
 import express from "express"
 import verifyJWT from "../middlewares/auth.midleware.js";
 import authorizeRoles from "../middlewares/role.middleware.js";
-import { createCourse, deleteCourse, getAllCourses, getCourseById, getMyCourse, publishCourse, updateCourse } from "../controllers/course.controller.js";
+import { createCourse, getAllCourses, getCourseById, getMyCourse, publishCourse, updateCourse } from "../controllers/course.controller.js";
 
 const router = express.Router();
 
@@ -10,7 +10,6 @@ router.get("/courses", verifyJWT, getAllCourses);
 router.get("/my-courses", verifyJWT, getMyCourse)
 router.get("/course/:courseId", verifyJWT, getCourseById)
 router.patch("/update/:courseId", verifyJWT, authorizeRoles("admin", "teacher"), updateCourse)
-router.delete("/delete/:id", verifyJWT, authorizeRoles("admin", "manager"), deleteCourse)
-router.patch("/publish/:id", verifyJWT, authorizeRoles("admin", "teacher"), publishCourse)
+router.patch("/publish/:courseId", verifyJWT, authorizeRoles("admin", "teacher"), publishCourse)
 
 export default router;

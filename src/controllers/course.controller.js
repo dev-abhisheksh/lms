@@ -295,46 +295,49 @@ const updateCourse = async (req, res) => {
     }
 }
 
-const deleteCourse = async (req, res) => {
-    try {
-        const { id } = req.params;
-
-        if (req.user.role !== "admin" && req.user.role !== "manager") {
-            return res.status(403).json({ message: "Only admins and managers can delete courses" })
-        }
-
-        const deleted = await Course.findByIdAndDelete(id);
-        if (!deleted) return res.status(404).json({ message: "Course not found" });
-
-        return res.status(200).json({ message: "Course deleted successfully" });
-    } catch (error) {
-        console.error("Failed to delete course:", error.message);
-        return res.status(500).json({ message: "Failed to delete course" });
-    }
-}
 
 const publishCourse = async (req, res) => {
     try {
-        const { id } = req.params;
+        const { courseId } = req.params;
+        if (!courseId) return res.status(400).json({ message: "CourseId is required" })
 
-        const course = await Course.findById(id);
+        const course = await Course.findById(courseId)
+            .populate("department", "name code isActive")
         if (!course) return res.status(404).json({ message: "Course not found" })
 
-        if (course.createdBy.toString() !== req.user._id.toString() && req.user._id !== "admin") {
-            return res.status(403).json({ message: "Access denied" });
+        if (req.user.role === "admin") {
+            course.isPublished = !course.isPublished
+            await course.save()
+
+            return res.status(200).json({
+                message: `Course is now ${course.isPublished ? "isPublished" : "unpublished"}`,
+                course
+            })
         }
 
-        course.isPublished = !course.isPublished
-        await course.save();
+        if (!course.department.isActive) return res.status(403).json({ message: "Department is inActive" })
 
-        return res.status(200).json({
-            message: `Course ${course.isPublished ? "published" : "unpublished"} successfully`,
-            isPublished: course.isPublished
-        });
+        if (req.user.role === "teacher") {
+            const enrolledTeacher = await CourseEnrollment.findOne({
+                user: req.user._id,
+                course: courseId,
+                role: "teacher"
+            })
 
+            if (!enrolledTeacher) return res.status(403).json({ message: "Your not assigned to teach this course" })
+            course.isPublished = !course.isPublished
+            await course.save()
+
+            return res.status(200).json({
+                message: `Course is now ${course.isPublished ? "isPublished" : "unpublished"}`,
+                course
+            })
+        }
+
+        return res.status(403).json({ message: "Not authorized" })
     } catch (error) {
-        console.error("Failed to toggle course publish status:", error.message);
-        return res.status(500).json({ message: "Failed to toggle course status" });
+        console.error("Toggle Course Publish Error:", error);
+        return res.status(500).json({ message: "Failed to toggle course status" })
     }
 }
 
@@ -344,6 +347,5 @@ export {
     getMyCourse,
     getCourseById,
     updateCourse,
-    deleteCourse,
     publishCourse
 }
