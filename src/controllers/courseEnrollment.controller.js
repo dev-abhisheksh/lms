@@ -136,33 +136,74 @@ const getMyEnrollments = async (req, res) => {
 
 const removeUserFromCourse = async (req, res) => {
     try {
-        const { courseId, userId } = req.params
+        const { courseId } = req.params;
+        const { userId } = req.body;
 
-        if (!courseId || !userId) return res.status(400).json({ message: "Ids are required" })
-
-        const course = await Course.findById(courseId).select("title description isPublished")
-        if (!course) return res.status(404).json({ message: "Course not found" })
-
-        const targetUser = await User.findById(userId).select("fullName email role")
-        if (!targetUser) return res.status(404).json({ message: "User not found" })
-
-        if (req.user.role === "manager" && (targetUser === "manager" || targetUser === "admin")) {
-            return res.status(403).json({ message: "managers cannot remove other managers or admins from the course" })
+        if (!courseId || !userId) {
+            return res.status(400).json({ message: "courseId and userId are required" });
         }
 
-        const enrollments = await CourseEnrollment.findOne({ user: userId, course: courseId })
-        if (!enrollments) return res.status(404).json({ message: `${targetUser.fullName} is not enrolled in the course` });
+        const course = await Course.findById(courseId)
+            .populate("department", "name code isActive");
 
-        await CourseEnrollment.deleteOne({ _id: enrollments._id })
+        if (!course) {
+            return res.status(404).json({ message: "Course not found" });
+        }
+
+        const department = course.department;
+
+        const targetUser = await User.findById(userId).select("fullName username email role");
+        if (!targetUser) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        if (req.user.role !== "admin" && req.user.role !== "manager") {
+            return res.status(403).json({ message: "Not authorized" });
+        }
+
+        if (req.user.role === "manager") {
+            if (!department.isActive) {
+                return res.status(403).json({ message: "Department is inactive — manager cannot remove users" });
+            }
+
+            if (targetUser.role === "teacher") {
+                return res.status(403).json({ message: "Manager cannot remove teachers from courses" });
+            }
+        }
+
+        const enrollment = await CourseEnrollment.findOne({
+            user: userId,
+            course: courseId
+        });
+
+        if (!enrollment) {
+            return res.status(404).json({ message: "User is not enrolled in this course" });
+        }
+
+        if (enrollment.role === "teacher") {
+            const teacherCount = await CourseEnrollment.countDocuments({
+                course: courseId,
+                role: "teacher"
+            });
+
+            if (teacherCount <= 1) {
+                return res.status(400).json({
+                    message: "Cannot remove the only teacher assigned to this course"
+                });
+            }
+        }
+
+        await CourseEnrollment.deleteOne({ _id: enrollment._id });
 
         return res.status(200).json({
-            message: `Removed ${targetUser.fullName} (${targetUser.role}) from course '${course.title}' successfully`
+            message: `${targetUser.fullName} removed from ${course.title} successfully`
         });
+
     } catch (error) {
-        console.error("Failed to remove user from course:", error.message);
+        console.error("Failed to remove user from course:", error);
         return res.status(500).json({ message: "Failed to remove user from course" });
     }
-}
+};
 
 const getCourseEnrollmentsSummary = async (req, res) => {
     try {
