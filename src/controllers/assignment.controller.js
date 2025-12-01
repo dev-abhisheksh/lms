@@ -141,6 +141,24 @@ const updateAssignment = async (req, res) => {
             updateDate.maxMarks = maxMarks
         }
 
+        let attachments = {};
+        if (req.files.length > 0) {
+            attachments = await Promise.all(
+                req.files.map(async (file) => {
+                    const uploaded = await uploadToCloudinary(file.buffer, "assignment_attachments");
+                    return {
+                        public_id: uploaded.public_id,
+                        url: uploaded.url,
+                        secure_url: uploaded.secure_url,
+                        bytes: uploaded.bytes,
+                        format: uploaded.format,
+                        original_filename: uploaded.original_filename
+                    }
+                })
+            )
+        }
+        updateDate.attachments = attachments
+
         const updatedAssignment = await Assignment.findByIdAndUpdate(
             assignmentId,
             updateDate,

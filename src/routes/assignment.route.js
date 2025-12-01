@@ -7,6 +7,6 @@ import { upload } from "../middlewares/multer.middleware.js";
 const router = express.Router();
 
 router.post("/create/:courseId", verifyJWT, authorizeRoles("admin", "teacher"), upload.array("attachments", 5), createAssignment)
-router.patch("/update/:assignmentId", verifyJWT, authorizeRoles("admin", "teacher"), updateAssignment)
+router.patch("/update/:assignmentId", verifyJWT, authorizeRoles("admin", "teacher"), upload.array("attachments", 5), updateAssignment)
 
 export default router;
