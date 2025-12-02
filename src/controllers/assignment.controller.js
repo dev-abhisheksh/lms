@@ -304,9 +304,70 @@ const getAssignmentByID = async (req, res) => {
     }
 }
 
+const togglePublishUnpublishAssignment = async (req, res) => {
+    try {
+        const { assignmentId } = req.params;
+        if (!assignmentId) return res.status(400).json({ message: "AssignmentID is required" })
+
+        const assignment = await Assignment.findById(assignmentId)
+            .populate({
+                path: "course",
+                select: "title isPublish",
+                populate: { path: "department", select: "name code isActive" }
+            })
+            .populate("createdBy", "_id fullName role")
+        if (!assignment) return res.status(404).json({ message: "Assignment not found" })
+
+        const course = assignment?.course;
+        const department = assignment?.course?.department;
+
+        const newPublished = !Boolean(assignment.isPublished)
+
+        if (req.user.role === admin) {
+            assignment.isPublished = newPublished;
+            assignment.publishedAt = newPublished ? new Date() : null;
+            await assignment.save()
+
+            return res.status(200).json({
+                message: `Assignment ${newPublished ? "published" : "unpublished"} successfully`,
+                assignment
+            })
+        }
+
+        if (!department?.isActive) return res.status(403).json({ message: "Department is not active" })
+        if (!assignment?.isActive) return res.status(403).json({ message: "Assignment is deleted" })
+
+        if (req.user.role === "teacher") {
+            const teacherEnrollment = await CourseEnrollment.findOne({
+                user: req.user._id,
+                course: course._id,
+                role: "teacher"
+            })
+            if (!teacherEnrollment) return res.status(403).json({ message: "You're not assigned to teach this course" })
+            if (assignment.createdBy.toString() !== req.user._id.toString()) {
+                return res.status(403).json({ message: "Access denied. You're not the creator" })
+            }
+
+            assignment.isPublished = newPublished;
+            assignment.publishedAt = newPublished ? new Date() : null;
+            await assignment.save();
+
+            return res.status(200).json({
+                message: `Assignment ${newPublished ? "published" : "unpublished"} successfully`,
+                assignment
+            })
+        }
+        return res.status(403).json({ message: "Not authorized" })
+    } catch (error) {
+        console.error("Toggle assignment publish error:", error);
+        return res.status(500).json({ message: "Failed to toggle assignment publish status" });
+    }
+}
+
 export {
     createAssignment,
     updateAssignment,
     getAssignments,
-    getAssignmentByID
+    getAssignmentByID,
+    togglePublishUnpublishAssignment
 }
