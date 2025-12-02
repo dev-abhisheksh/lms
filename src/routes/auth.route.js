@@ -9,16 +9,6 @@ const router = express.Router();
 router.post("/register", registerUser)
 router.post("/login", loginUser)
 
-router.get("/hi", verifyJWT, authorizeRoles("admin"), (req, res) => {
-    res.send("Admin only");
-});
 
-router.get("/hi1", verifyJWT, authorizeRoles("admin", "manager"), (req, res) => {
-    res.send("Admin & Manager only");
-});
-
-router.get("/hi2", verifyJWT, authorizeRoles("admin", "manager", "user"), (req, res) => {
-    res.send("Open for all");
-});
 
 export default router;
