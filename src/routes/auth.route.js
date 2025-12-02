@@ -5,10 +5,9 @@ import authorizeRoles from "../middlewares/role.middleware.js";
 
 const router = express.Router();
 
-//register
+
 router.post("/register", registerUser)
 router.post("/login", loginUser)
-
 
 
 export default router;

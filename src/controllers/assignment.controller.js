@@ -142,7 +142,7 @@ const updateAssignment = async (req, res) => {
         }
 
         let attachments = {};
-        if (req.files.length > 0) {
+        if (req.files?.length > 0) {
             attachments = await Promise.all(
                 req.files.map(async (file) => {
                     const uploaded = await uploadToCloudinary(file.buffer, "assignment_attachments");
@@ -175,7 +175,72 @@ const updateAssignment = async (req, res) => {
     }
 }
 
+const getAssignments = async (req, res) => {
+    try {
+        const { courseId } = req.params;
+        if (!courseId) return res.status(400).json({ message: "CourseID is required" })
+
+        const course = await Course.findById(courseId)
+            .populate("department", "name code isActive")
+        if (!course) return res.status(404).json({ message: "Course not found" })
+
+        let assignments = await Assignment.find({ course: courseId })
+        if (assignments.length === 0) {
+            return res.status(404).json({
+                message: "Course doesnt have any assignments",
+                count: 0,
+                assignments: []
+            })
+        }
+
+        if (req.user.role === "admin") {
+            return res.status(200).json({
+                message: "Fetched all assignments of a course",
+                count: assignments.length,
+                assignments
+            })
+        } else {
+            if (!course.department.isPublished) return res.status(403).json({ message: "Department is not Published" })
+            if (req.user.role === "teacher") {
+                const teacherEnrollment = await CourseEnrollment.findOne({
+                    user: req.user._id,
+                    course: courseId,
+                    role: "teacher"
+                })
+                if (!teacherEnrollment) return res.status(403).json({ message: "You're not assigned to teach this course" })
+
+                return res.status(200).json({
+                    message: "Fetched all assignments of a course",
+                    count: assignments.length,
+                    assignments
+                })
+            } else if (req.user.role === "student") {
+                const studentEnrollment = await CourseEnrollment.findOne({
+                    user: req.user._id,
+                    course: courseId,
+                    role: "student"
+                })
+                if (!studentEnrollment) return res.status(403).json({ message: "You're not enrolled in this course" })
+                assignments = assignments.filter(en => en.isPublished)
+
+                return res.status(200).json({
+                    message: "Fetched all assignments of a course",
+                    count: assignments.length,
+                    assignments
+                })
+            }
+
+            return res.status(403).json({ message: "Not authorized" })
+
+        }
+    } catch (error) {
+        console.error("Failed to fetch all assignments of a course")
+        return res.status(500).json({ message: "ailed to fetch all assignments of a course" })
+    }
+}
+
 export {
     createAssignment,
-    updateAssignment
+    updateAssignment,
+    getAssignments
 }
