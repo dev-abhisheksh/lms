@@ -1,6 +1,6 @@
 import { Submission } from "../models/submissions.model.js";
 import { Assignment } from "../models/assignment.model.js";
-import { uploadToCloudinary } from "../utils/cloudinary.js";
+import cloudinary, { uploadToCloudinary } from "../utils/cloudinary.js";
 import { Course } from "../models/course.model.js";
 import { CourseEnrollment } from "../models/courseEnrollment.model.js"
 
@@ -127,7 +127,7 @@ const getAllSubmissions = async (req, res) => {
                 status: { $ne: "deleted" }
             })
                 .populate("student", "fullName username email")
-                .populate("assignment", "title");
+                .populate("assignment", "title maxMarks");
 
             return res.status(200).json({
                 message: `Fetched all the submissions for ${assignment?.title}`,
@@ -156,7 +156,7 @@ const getAllSubmissions = async (req, res) => {
                 status: { $ne: "deleted" }
             })
                 .populate("student", "fullName username email")
-                .populate("assignment", "title");
+                .populate("assignment", "title maxMarks");
 
             return res.status(200).json({
                 message: `Fetched all the submissions for ${assignment?.title}`,
@@ -170,7 +170,139 @@ const getAllSubmissions = async (req, res) => {
     }
 }
 
+const gradingSubissions = async (req, res) => {
+    try {
+        const { submissionId } = req.params;
+        const { grade, feedback } = req.body;
+        if (!submissionId || grade == null) return res.status(400).json({ message: "SubmissionID and Grades are required" })
+
+        const submission = await Submission.findById(submissionId)
+            .populate({
+                path: "assignment",
+                select: "title isActive isPublished maxMarks",
+                populate: {
+                    path: "course", select: "title isPublished",
+                    populate: { path: "department", select: "name code isActive" }
+                }
+            })
+        if (!submission) return res.status(404).json({ message: "Submission not found" })
+
+        const department = submission?.assignment?.course?.department;
+        const course = submission?.assignment?.course;
+        const assignment = submission?.assignment;
+
+        if (!assignment.isActive) return res.status(400).json({ message: "Cannot grade. Assignment is deleted" })
+        if (submission.status === "deleted") return res.status(400).json({ message: "Cannot grade deleted submission" })
+        if (isNaN(grade)) return res.status(400).json({ message: "Grade must be Number" })
+        if (grade < 0) return res.status(400).json({ message: "Grade should not be below zero" })
+        if (grade > assignment.maxMarks) return res.status(400).json({ message: `Grade-${grade} must not be greater than maxMarks-${assignment.maxMarks}` })
+
+        if (req.user.role === "admin") {
+            const gradeSubmission = await Submission.findByIdAndUpdate(
+                submissionId,
+                {
+                    grade: grade,
+                    feedback: feedback || "",
+                    gradedAt: new Date(),
+                    gradedBy: req.user._id,
+                    status: "graded"
+                },
+                { new: true }
+            )
+
+            return res.status(200).json({
+                message: "Submission graded successfully",
+                grading: gradeSubmission
+            })
+        }
+
+        if (!department.isActive) return res.status(403).json({ message: "Department is not active" })
+        if (!course.isPublished) return res.status(403).json({ message: "Course is not published" })
+        if (!assignment.isPublished) return res.status(403).json({ message: "Assignmet is not yet published" })
+
+        if (req.user.role === "teacher") {
+            const teacherEnrollment = await CourseEnrollment.findOne({
+                user: req.user._id,
+                course: course._id,
+                role: "teacher"
+            })
+            if (!teacherEnrollment) return res.status(403).json({ message: "You're not assigned to teach this course" })
+
+            const gradeSubmission = await Submission.findByIdAndUpdate(
+                submissionId,
+                {
+                    grade: grade,
+                    feedback: feedback || "",
+                    gradedAt: new Date(),
+                    gradedBy: req.user._id,
+                    status: "graded"
+                },
+                { new: true }
+            )
+
+            return res.status(200).json({
+                message: "Submission graded successfully",
+                grading: gradeSubmission
+            })
+        }
+
+        return res.status(403).json({ message: "Not authorized" })
+
+    } catch (error) {
+        console.error("Failed to grade submission", error)
+        return res.status(500).json({ message: "Failed to grade submission" })
+    }
+}
+
+const deleteSubmission = async (req, res) => {
+    try {
+        const { submissionId } = req.params;
+        if (!submissionId) return res.status(400).json({ message: "SubmissionID is required" });
+
+        const submission = await Submission.findById(submissionId);
+        if (!submission) return res.status(404).json({ message: "Submission not found" });
+
+        // Already deleted
+        if (submission.status === "deleted") {
+            return res.status(400).json({ message: "Submission is already deleted" });
+        }
+
+        // Cannot delete graded submissions
+        if (submission.status === "graded") {
+            return res.status(403).json({ message: "Cannot delete graded submission" });
+        }
+
+        // Auth check
+        if (
+            req.user.role !== "admin" &&
+            submission.student.toString() !== req.user._id.toString()
+        ) {
+            return res.status(403).json({ message: "Not authorized" });
+        }
+
+        // Delete cloudinary files
+        if (submission.files?.length > 0) {
+            for (const file of submission.files) {
+                if (file.public_id) await cloudinary.uploader.destroy(file.public_id);
+            }
+        }
+
+        // Soft delete
+        submission.status = "deleted";
+        submission.deletedAt = new Date();
+        await submission.save();
+
+        return res.status(200).json({ message: "Submission deleted successfully" });
+
+    } catch (error) {
+        console.error("Failed to delete submission", error);
+        return res.status(500).json({ message: "Failed to delete submission" });
+    }
+};
+
 export {
     createSubmission,
-    getAllSubmissions
+    getAllSubmissions,
+    gradingSubissions,
+    deleteSubmission
 };
