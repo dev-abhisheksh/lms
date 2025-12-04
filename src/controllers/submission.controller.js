@@ -300,9 +300,50 @@ const deleteSubmission = async (req, res) => {
     }
 };
 
+const mySubmissions = async (req, res) => {
+    try {
+        if (req.user.role !== "student") {
+            return res.status(403).json({ message: "Only students can see their submissions" })
+        }
+
+        const { courseId, assignmentId } = req.query;
+
+        const query = {
+            student: req.user._id,
+            status: { $ne: "deleted" }
+        }
+
+        let submissions = await Submission.find(query)
+            .populate({
+                path: "assignment",
+                select: "title dueDate isActive isPublished course",
+                populate: {
+                    path: "course",
+                    select: "title isPublished department",
+                    populate: { path: "departemnt", select: "name code isActive" }
+                }
+            })
+            .sort({ createdAt: -1 })
+
+        if (courseId) {
+            submissions = submissions.filter((s) => s.assignment?.course._id === courseId)
+        }
+
+        return res.status(200).json({
+            message: "Fetched your submissions",
+            count: submissions.length,
+            submissions
+        });
+    } catch (error) {
+        console.error("Failed to fetch submissions:", error);
+        return res.status(500).json({ message: "Failed to fetch submissions" });
+    }
+}
+
 export {
     createSubmission,
     getAllSubmissions,
     gradingSubissions,
-    deleteSubmission
+    deleteSubmission,
+    mySubmissions
 };
