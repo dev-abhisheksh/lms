@@ -3,6 +3,7 @@ import { Assignment } from "../models/assignment.model.js";
 import cloudinary, { uploadToCloudinary } from "../utils/cloudinary.js";
 import { Course } from "../models/course.model.js";
 import { CourseEnrollment } from "../models/courseEnrollment.model.js"
+import { populate } from "dotenv";
 
 const createSubmission = async (req, res) => {
     try {
@@ -320,7 +321,7 @@ const mySubmissions = async (req, res) => {
                 populate: {
                     path: "course",
                     select: "title isPublished department",
-                    populate: { path: "departemnt", select: "name code isActive" }
+                    populate: { path: "department", select: "name code isActive" }
                 }
             })
             .sort({ createdAt: -1 })
@@ -405,11 +406,14 @@ const getSingleSubmission = async (req, res) => {
 };
 
 
+
+
 export {
     createSubmission,
     getAllSubmissions,
     gradingSubissions,
     deleteSubmission,
     mySubmissions,
-    getSingleSubmission
+    getSingleSubmission,
+    updateSubmission
 };
