@@ -198,7 +198,6 @@ const getAssignments = async (req, res) => {
 
 
         if (req.user.role === "admin") {
-            assignments = assignments.filter(a => a.isActive)
 
             return res.status(200).json({
                 message: "Fetched all assignments of a course",
@@ -292,6 +291,7 @@ const getAssignmentByID = async (req, res) => {
             })
         }
 
+        if (!course?.isPublished) return res.status(403).json({ message: "Course is not published" })
         if (!assignment.isPublished) return res.status(403).json({ message: "Assignment is not published yet!" })
 
         if (req.user.role === "student") {
@@ -376,7 +376,6 @@ const togglePublishUnpublishAssignment = async (req, res) => {
     }
 }
 
-
 const deleteAssignment = async (req, res) => {
     try {
         const { assignmentId } = req.params;
@@ -430,6 +429,7 @@ const deleteAssignment = async (req, res) => {
         return res.status(500).json({ message: "Failed to delete assignment" })
     }
 }
+
 
 export {
     createAssignment,
