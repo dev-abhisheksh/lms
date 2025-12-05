@@ -405,7 +405,99 @@ const getSingleSubmission = async (req, res) => {
     }
 };
 
+const updateSubmission = async (req, res) => {
+    try {
+        if (req.user.role !== "student")
+            return res.status(403).json({ message: "Only students can update submissions" });
 
+        const { submissionId } = req.params;
+        if (!submissionId) return res.status(400).json({ message: "submissionId is required" });
+
+        const submission = await Submission.findById(submissionId)
+            .populate({
+                path: "assignment",
+                select: "title isActive isPublished dueDate course",
+                populate: {
+                    path: "course",
+                    select: "title isPublished department",
+                    populate: { path: "department", select: "name code isActive" }
+                }
+            });
+
+        if (!submission) return res.status(404).json({ message: "Submission not found" });
+
+        const assignment = submission.assignment;
+        const course = assignment.course;
+        const department = course.department;
+s
+        if (!department.isActive) return res.status(403).json({ message: "Department is not active" });
+        if (!course.isPublished) return res.status(403).json({ message: "Course is not published" });
+        if (!assignment.isActive) return res.status(403).json({ message: "Assignment is deleted" });
+
+        const now = new Date();
+        if (now >= new Date(assignment.dueDate))
+            return res.status(400).json({ message: "Due date passed. Cannot update submission." });
+
+        if (submission.status === "deleted")
+            return res.status(400).json({ message: "Submission is deleted" });
+
+        if (submission.status === "graded")
+            return res.status(403).json({ message: "Submission is already graded" });
+
+        const enrollment = await CourseEnrollment.findOne({
+            user: req.user._id,
+            course: course._id,
+            role: "student"
+        });
+
+        if (!enrollment)
+            return res.status(403).json({ message: "You're not enrolled in this course" });
+
+        // Handle file replacement only if new files provided
+        let updatedFiles = submission.files;
+
+        if (req.files?.length > 0) {
+            // delete old files
+            for (const file of submission.files) {
+                if (file.public_id) await cloudinary.uploader.destroy(file.public_id);
+            }
+
+            // upload new files
+            updatedFiles = await Promise.all(
+                req.files.map(async (file) => {
+                    const uploaded = await uploadToCloudinary(file.buffer, "submissions");
+                    return {
+                        public_id: uploaded.public_id,
+                        secure_url: uploaded.secure_url,
+                        url: uploaded.url,
+                        bytes: uploaded.bytes,
+                        format: uploaded.format,
+                        original_filename: uploaded.original_filename
+                    };
+                })
+            );
+        }
+
+        // update submission
+        const updatedSubmission = await Submission.findByIdAndUpdate(
+            submissionId,
+            {
+                files: updatedFiles,
+                textAnswer: req.body.textAnswer || submission.textAnswer
+            },
+            { new: true }
+        );
+
+        return res.status(200).json({
+            message: "Submission updated successfully",
+            submission: updatedSubmission
+        });
+
+    } catch (error) {
+        console.error("Failed to update submission:", error);
+        return res.status(500).json({ message: "Failed to update submission" });
+    }
+};
 
 
 export {
