@@ -376,57 +376,6 @@ const togglePublishUnpublishAssignment = async (req, res) => {
     }
 }
 
-const getMyAssignments = async (req, res) => {
-    try {
-        const { courseId } = req.params;
-        if (!courseId) return res.status(400).json({ message: "CourseID is required" })
-
-        const course = await Course.findById(courseId)
-            .populate("department", "name code isActive")
-        if (!course) return res.status(404).json({ message: "Course not found" })
-
-        if (!course?.department?.isActive) return res.status(403).json({ message: "Department is not Active" })
-
-        if (req.user.role === "admin") {
-            const assignments = await Assignment.find({
-                course: courseId,
-                isActive: true
-            })
-
-            return res.status(200).json({
-                message: "Fetched all assignments for this course (admin)",
-                count: assignments.length,
-                assignments
-            })
-        }
-
-        if (req.user.role === "teacher") {
-            const teacherEnrollment = await CourseEnrollment.findOne({
-                user: req.user._id,
-                course: courseId,
-                role: "teacher"
-            })
-            if (!teacherEnrollment) return res.status(403).json({ message: "You're not assigned to teach this course" })
-
-            let assignments = await Assignment.find({
-                course: courseId,
-                createdBy: req.user._id,
-                isActive: true
-            })
-
-            return res.status(200).json({
-                message: "Fetched your assignments",
-                count: assignments.length,
-                assignments
-            })
-        }
-
-        return res.status(403).json({ message: "Not authorized" })
-    } catch (error) {
-        console.error("Failed to fetch ypur assignments", error)
-        return res.status(500).json({ message: "Failed to fetch your assignments" })
-    }
-}
 
 const deleteAssignment = async (req, res) => {
     try {
@@ -488,6 +437,5 @@ export {
     getAssignments,
     getAssignmentByID,
     togglePublishUnpublishAssignment,
-    getMyAssignments,
     deleteAssignment
 }
