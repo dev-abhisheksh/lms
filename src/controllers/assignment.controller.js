@@ -187,6 +187,7 @@ const getAssignments = async (req, res) => {
         if (!course) return res.status(404).json({ message: "Course not found" })
 
         let assignments = await Assignment.find({ course: courseId })
+            .populate("course", "title isPublished")
         if (assignments.length === 0) {
             return res.status(404).json({
                 message: "Course doesnt have any assignments",
@@ -195,7 +196,10 @@ const getAssignments = async (req, res) => {
             })
         }
 
+
         if (req.user.role === "admin") {
+            assignments = assignments.filter(a => a.isActive)
+
             return res.status(200).json({
                 message: "Fetched all assignments of a course",
                 count: assignments.length,
@@ -203,6 +207,7 @@ const getAssignments = async (req, res) => {
             })
         } else {
             if (!course.department.isActive) return res.status(403).json({ message: "Department is not active" })
+
             if (req.user.role === "teacher") {
                 const teacherEnrollment = await CourseEnrollment.findOne({
                     user: req.user._id,
@@ -211,19 +216,24 @@ const getAssignments = async (req, res) => {
                 })
                 if (!teacherEnrollment) return res.status(403).json({ message: "You're not assigned to teach this course" })
 
+                assignments = assignments.filter(a => a.isActive)
+
                 return res.status(200).json({
                     message: "Fetched all assignments of a course",
                     count: assignments.length,
                     assignments
                 })
             } else if (req.user.role === "student") {
+                if (!course.isPublished) return res.status(403).json({ message: "Course is not published" });
+
+                assignments = assignments.filter(a => a.isActive && a.isPublished)
+
                 const studentEnrollment = await CourseEnrollment.findOne({
                     user: req.user._id,
                     course: courseId,
                     role: "student"
                 })
                 if (!studentEnrollment) return res.status(403).json({ message: "You're not enrolled in this course" })
-                assignments = assignments.filter(en => en.isPublished)
 
                 return res.status(200).json({
                     message: "Fetched all assignments of a course",
