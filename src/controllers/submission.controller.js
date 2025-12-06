@@ -536,10 +536,10 @@ const getSubmissionStatusForAssignment = async (req, res) => {
         const submissions = await Submission.find({
             assignment: assignmentId,
             status: { $ne: "deleted" }
-        }).select("student", "fullName username email")
+        }).populate("student", "fullName username email")
 
         const enrolledStudent = await CourseEnrollment.find({
-            course: courseId,
+            course: course._id,
             role: "student"
         }).populate("user", "fullName username email")
 
