@@ -6,14 +6,22 @@ const moduleSchema = new mongoose.Schema({
         required: true,
         trim: true
     },
+
     description: {
         type: String
     },
+
     course: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Course",
         required: true
+    },
+
+    isActive: {
+        type: Boolean,
+        default: true
     }
+
 }, { timestamps: true })
 
 moduleSchema.index({ course: 1 });
