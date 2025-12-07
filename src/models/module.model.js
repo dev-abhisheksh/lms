@@ -9,10 +9,6 @@ const moduleSchema = new mongoose.Schema({
     description: {
         type: String
     },
-    lessons: [{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Lesson"
-    }],
     course: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Course",
