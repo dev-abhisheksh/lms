@@ -177,7 +177,82 @@ const getLessonsByModule = async (req, res) => {
     }
 }
 
+const getLessonById = async (req, res) => {
+    try {
+        const { lessonId } = req.params;
+        if (!lessonId) return res.status(400).json({ message: "LessonId is required" })
+
+        const lesson = await Lesson.findById(lessonId)
+            .populate("module", "title isActive")
+            .populate({
+                path: "course",
+                select: "title isPublished",
+                populate: {
+                    path: "department",
+                    select: "name code isActive"
+                }
+            })
+
+        if (!lesson) return res.status(404).json({ message: "Lesson not found" })
+
+        const course = lesson?.course
+        const module = lesson?.module
+        const department = lesson?.course?.department
+
+        if (req.user.role === "admin") {
+            return res.status(200).json({
+                message: "Fetched lesson bt ID",
+                lesson
+            })
+        }
+
+        if (!department?.isActive) return res.status(403).json({ message: "Department is not active" })
+        if (!module?.isActive) return res.status(403).json({ message: "Module is deleted" })
+
+        if (req.user.role === "manager") {
+            return res.status(200).json({
+                message: "Fetched lesson bt ID",
+                lesson
+            })
+        }
+
+        if (req.user.role === "teacher") {
+            const enrolledTeacher = await CourseEnrollment.findOne({
+                user: req.user._id,
+                course: course._id,
+                role: "teacher"
+            })
+            if (!enrolledTeacher) return res.status(403).json({ message: "You're not assigned to teach this course" })
+
+            return res.status(200).json({
+                message: "Fetched lesson bt ID",
+                lesson
+            })
+        }
+
+        if (!course.isPublished) return res.status(403).json({ message: "Course is not published" })
+        if (!lesson.isActive) return res.status(403).json({ message: "Lesson is deleted" })
+
+        const enrolledStudent = await CourseEnrollment.findOne({
+            user: req.user._id,
+            course: course._id,
+            role: "student"
+        })
+        if (!enrolledStudent) return res.status(403).json({ message: "You're not enrolled in this course" })
+
+        return res.status(200).json({
+            message: "Fetched lesson bt ID",
+            lesson
+        })
+
+    } catch (error) {
+        console.error("Failed to fetch lesson", error)
+        return res.status(500).json({ message: "Failed to fetch lesson" })
+    }
+}
+
 export {
     createLesson,
-    getLessonsByModule
+    getLessonsByModule,
+    getLessonById
 }
