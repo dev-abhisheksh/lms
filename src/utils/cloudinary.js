@@ -17,13 +17,14 @@ export const uploadToCloudinary = (buffer, folder = "lms_uploads", resourceType 
                 resource_type: resourceType
             },
             (error, result) => {
-                if(error) reject(error);
-                else resolve(result.secure_url)
+                if (error) reject(error);
+                else resolve(result);   // FIXED: return full Cloudinary object
             }
-        )
+        );
 
-        streamifier.createReadStream(buffer).pipe(uploadStream)
-    })
-}
+        streamifier.createReadStream(buffer).pipe(uploadStream);
+    });
+};
+
 
 export default cloudinary
