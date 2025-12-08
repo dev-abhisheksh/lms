@@ -1,6 +1,6 @@
 import { Module } from "../models/module.model.js"
 import { CourseEnrollment } from "../models/courseEnrollment.model.js"
-import { uploadToCloudinary } from "../utils/cloudinary.js";
+import cloudinary, { uploadToCloudinary } from "../utils/cloudinary.js";
 import { Lesson } from "../models/lesson.model.js";
 import { Course } from "../models/course.model.js";
 
@@ -251,8 +251,97 @@ const getLessonById = async (req, res) => {
     }
 }
 
+const updateLesson = async (req, res) => {
+    try {
+        const { lessonId } = req.params;
+        const { title, description, textContent, videoLink } = req.body;
+        if (!lessonId) return res.status(400).json({ message: "LessonID is required" })
+
+        if (!["admin", "teacher"].includes(req.user.role)) {
+            return res.status(403).json({ message: "Not authorized" })
+        }
+
+        const lesson = await Lesson.findById(lessonId)
+            .populate("module", "title isActive")
+            .populate({
+                path: "course",
+                select: "title isPublished",
+                populate: { path: "department", select: "name code isActive" }
+            })
+        if (!lesson) return res.status(404).json({ message: "Lesson not found" })
+
+        const course = lesson?.course
+        const module = lesson?.module
+        const department = lesson?.course?.department
+
+        if (req.user.role !== "admin") {
+            if (!department.isActive) return res.status(403).json({ message: "Department is not active" })
+            if (!lesson?.isActive) return res.status(403).json({ message: "Lesson is deleted" })
+
+            const enrolledTeacher = await CourseEnrollment.findOne({
+                user: req.user._id,
+                course: course._id,
+                role: "student"
+            })
+            if (!enrolledTeacher) return res.status(403).json({ message: "You're not assigned to teach this course" })
+        }
+        let updatedFiles = lesson.files;
+
+        if (req.files?.length > 0) {
+            //deleting old files
+            for (const oldFile of lesson.files) {
+                if (oldFile.public_id) {
+                    const result = await cloudinary.uploader.destroy(oldFile.public_id, {
+                        resource_type: "auto"
+                    });
+                    console.log("Cloudinary delete:", result);
+                }
+            }
+
+
+            updatedFiles = await Promise.all(
+                req.files.map(async (file) => {
+                    const uploader = await uploadToCloudinary(file.buffer, "lessons");
+                    return {
+                        public_id: uploader.public_id,
+                        url: uploader.url,
+                        secure_url: uploader.secure_url,
+                        bytes: uploader.bytes,
+                        format: uploader.format,
+                        original_filename: uploader.original_filename
+                    }
+                })
+            )
+        }
+
+        const updateData = {};
+
+        if (title) updateData.title = title.trim();
+        if (description) updateData.description = description.trim();
+        if (textContent) updateData.textContent = textContent.trim();
+        if (videoLink) updateData.videoLink = videoLink.trim();
+        updateData.files = updatedFiles;
+
+
+        const updatedLesson = await Lesson.findByIdAndUpdate(
+            lessonId,
+            updateData,
+            { new: true }
+        )
+
+        return res.status(200).json({
+            message: "Lesson updated successfully",
+            updatedLesson
+        })
+    } catch (error) {
+        console.log("Failed to update lesson", error)
+        return res.status(500).json({ message: "Failed to update lesson" })
+    }
+}
+
 export {
     createLesson,
     getLessonsByModule,
-    getLessonById
+    getLessonById,
+    updateLesson
 }

@@ -18,7 +18,7 @@ export const uploadToCloudinary = (buffer, folder = "lms_uploads", resourceType 
             },
             (error, result) => {
                 if (error) reject(error);
-                else resolve(result);   // FIXED: return full Cloudinary object
+                else resolve(result); 
             }
         );
 
