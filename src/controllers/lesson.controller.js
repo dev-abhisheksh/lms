@@ -281,7 +281,7 @@ const updateLesson = async (req, res) => {
             const enrolledTeacher = await CourseEnrollment.findOne({
                 user: req.user._id,
                 course: course._id,
-                role: "student"
+                role: "teacher"
             })
             if (!enrolledTeacher) return res.status(403).json({ message: "You're not assigned to teach this course" })
         }
@@ -339,9 +339,54 @@ const updateLesson = async (req, res) => {
     }
 }
 
+const toggleLesson = async (req, res) => {
+    try {
+        const { lessonId } = req.params;
+        if (!lessonId) return res.status(400).json({ message: "LessonID is required" })
+
+        if (!["admin", "teacher"].includes(req.user.role)) return res.status(403).json({ message: "Only Admins and Assiged teachers are permitted" })
+
+        const lesson = await Lesson.findById(lessonId)
+            .populate("module", "title isActive")
+            .populate({
+                path: "course",
+                select: "title isPublished",
+                populate: { path: "department", select: "name code isActive" }
+            })
+        if (!lesson) return res.status(404).json({ message: "Lesson not found" })
+
+        const module = lesson?.module
+        const course = lesson?.course
+        const department = lesson?.course?.department
+
+        if (req.user.role !== "admin") {
+            if (!department?.isActive) return res.status(403).json({ message: "Department is not active" })
+            if (!module?.isActive) return res.status(403).json({ message: "Module is been deleted" })
+
+            const enrolledTeacher = await CourseEnrollment.findOne({
+                user: req.user._id,
+                course: course._id,
+                role: "teacher"
+            })
+            if (!enrolledTeacher) return res.status(403).json({ message: "You're not assigned to teach this course" })
+        }
+    
+        lesson.isActive = !lesson.isActive
+        await lesson.save();
+
+        return res.status(200).json({
+            message: `Lesson visibility toggled to ${lesson.isActive ? "Active" : "Not Active"}`,
+        })
+    } catch (error) {
+        console.error("Failed to toggle visibility")
+        return res.status(500).json({ message: "Failed to toggle visibility" })
+    }
+}
+
 export {
     createLesson,
     getLessonsByModule,
     getLessonById,
-    updateLesson
+    updateLesson,
+    toggleLesson
 }
