@@ -1,8 +1,10 @@
+
 import { Assignment } from "../models/assignment.model.js";
 import { Course } from "../models/course.model.js";
 import { CourseEnrollment } from "../models/courseEnrollment.model.js";
 import { Submission } from "../models/submissions.model.js"
 import { uploadToCloudinary } from "../utils/cloudinary.js";
+import { client } from "../utils/redisClient.js";
 
 const createAssignment = async (req, res) => {
     try {
@@ -182,71 +184,82 @@ const getAssignments = async (req, res) => {
         const { courseId } = req.params;
         if (!courseId) return res.status(400).json({ message: "CourseID is required" })
 
+        const cacheKey = `allAssignments:${req.user.role}:${req.user._id || "none"}`
+        const cached = await client.get(cacheKey)
+        if (cached) {
+            const parsed = JSON.parse(cached)
+            return res.status(200).json({
+                message: "Fetched all the assignments of a course",
+                count: parsed.length,
+                assignments: parsed
+            })
+        }
+
         const course = await Course.findById(courseId)
             .populate("department", "name code isActive")
+
         if (!course) return res.status(404).json({ message: "Course not found" })
 
         let assignments = await Assignment.find({ course: courseId })
-            .populate("course", "title isPublished")
+
+        const department = course?.department
+
         if (assignments.length === 0) {
-            return res.status(404).json({
-                message: "Course doesnt have any assignments",
+            return res.status(200).json({
+                message: "No active assignments found",
                 count: 0,
-                assignments: []
+                assignments: 0
             })
         }
 
-
         if (req.user.role === "admin") {
-
+            await client.set(cacheKey, JSON.stringify(assignments), "EX", 300)
             return res.status(200).json({
-                message: "Fetched all assignments of a course",
+                message: "Fetched all assignments",
                 count: assignments.length,
                 assignments
             })
-        } else {
-            if (!course.department.isActive) return res.status(403).json({ message: "Department is not active" })
-
-            if (req.user.role === "teacher") {
-                const teacherEnrollment = await CourseEnrollment.findOne({
-                    user: req.user._id,
-                    course: courseId,
-                    role: "teacher"
-                })
-                if (!teacherEnrollment) return res.status(403).json({ message: "You're not assigned to teach this course" })
-
-                assignments = assignments.filter(a => a.isActive)
-
-                return res.status(200).json({
-                    message: "Fetched all assignments of a course",
-                    count: assignments.length,
-                    assignments
-                })
-            } else if (req.user.role === "student") {
-                if (!course.isPublished) return res.status(403).json({ message: "Course is not published" });
-
-                assignments = assignments.filter(a => a.isActive && a.isPublished)
-
-                const studentEnrollment = await CourseEnrollment.findOne({
-                    user: req.user._id,
-                    course: courseId,
-                    role: "student"
-                })
-                if (!studentEnrollment) return res.status(403).json({ message: "You're not enrolled in this course" })
-
-                return res.status(200).json({
-                    message: "Fetched all assignments of a course",
-                    count: assignments.length,
-                    assignments
-                })
-            }
-
-            return res.status(403).json({ message: "Not authorized" })
-
         }
+
+        if (!department.isActive) return res.status(403).json({ message: "Department is not active" })
+        assignments = assignments.filter(a => a.isActive)
+
+        if (req.user.role === "teacher") {
+            const teacherEnrollment = await CourseEnrollment.findOne({
+                user: req.user._id,
+                course: course._id,
+                role: "teacher"
+            })
+
+            if (!teacherEnrollment) return res.status(403).json({ message: "You're not assigned to teach this course" })
+            await client.set(cacheKey, JSON.stringify(assignments), "EX", 300)
+            return res.status(200).json({
+                message: "Fetched all assignments",
+                count: assignments.length,
+                assignments
+            })
+        }
+
+        //student validations
+        const studentEnrollment = await CourseEnrollment.findOne({
+            user: req.user._id,
+            course: courseId,
+            role: "student"
+        })
+
+        if (!studentEnrollment) return res.status(403).json({ message: "You're not enrolled in this course" })
+        assignments = assignments.filter(a => a.isPublished)
+
+        await client.set(cacheKey, JSON.stringify(assignments), "EX", 300)
+
+        return res.status(200).json({
+            message: "Fetched all assignments",
+            count: assignments.length,
+            assignments
+        })
     } catch (error) {
-        console.error("Failed to fetch all assignments of a course")
-        return res.status(500).json({ message: "ailed to fetch all assignments of a course" })
+        console.error("Failed to fetch all the assignments", error)
+        return res.status(500).json({ message: "Failed to fetch all the assignments" })
     }
 }
 
