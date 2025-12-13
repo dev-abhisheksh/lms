@@ -3,6 +3,7 @@ import { CourseEnrollment } from "../models/courseEnrollment.model.js";
 import { Department } from "../models/department.model.js";
 import { Module } from "../models/module.model.js";
 import { uploadToCloudinary } from "../utils/cloudinary.js";
+import { client } from "../utils/redisClient.js";
 
 //create COURSE
 const createCourse = async (req, res) => {
@@ -60,6 +61,17 @@ const getAllCourses = async (req, res) => {
     try {
         const { departmentId } = req.query;
         const { search, page = 1, limit = 20 } = req.query;
+        const role = req.user.role;
+        const userId = req.user._id
+
+        //Seaching if the course data is in the ram
+        const cacheKey = `courses:${role}:${userId || "none"}:${departmentId || "all"}:${search || "none"}:${page}:${limit}`
+        //courses:admin:none(no specific userId do all admins can access):all(all only for admin):none:1:20
+
+        const cacheCourses = await client.get(cacheKey)
+        if (cacheCourses) {
+            return res.status(200).json(JSON.parse(cacheCourses))
+        }
 
         let department = null;
         if (departmentId) {
@@ -108,6 +120,14 @@ const getAllCourses = async (req, res) => {
             .sort({ title: 1 })
             .skip(skip)
             .limit(Math.min(100, Number(limit)))
+
+        //Redis storing courses in the ram
+        await client.set(cacheKey, JSON.stringify({
+            message: "Courses fetched successfully",
+            meta: { page: Number(page), limit: Number(limit), count: courses.length },
+            courses
+        }), "EX", 300)
+
 
         return res.status(200).json({
             message: "Courses fetched successfully",
