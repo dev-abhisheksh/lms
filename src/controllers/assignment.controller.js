@@ -1,4 +1,5 @@
 
+
 import { Assignment } from "../models/assignment.model.js";
 import { Course } from "../models/course.model.js";
 import { CourseEnrollment } from "../models/courseEnrollment.model.js";
@@ -268,6 +269,15 @@ const getAssignmentByID = async (req, res) => {
         const { assignmentId } = req.params;
         if (!assignmentId) return res.status(400).json({ message: "Assignment ID is required" })
 
+        const cacheKey = `assignmentById:${assignmentId}:${req.user.role}:${req.user._id || "none"}`
+        const cached = await client.get(cacheKey)
+        if (cached) {
+            return res.status(200).json({
+                message: "Assignment fetched successfully",
+                assignment: JSON.parse(cached)
+            })
+        }
+
         let assignment = await Assignment.findById(assignmentId)
             .populate({
                 path: "course",
@@ -281,6 +291,7 @@ const getAssignmentByID = async (req, res) => {
 
         //Roles validation
         if (req.user.role === "admin") {
+            await client.set(cacheKey, JSON.stringify(assignment), "EX", 300)
             return res.status(200).json({
                 message: "Assignment fetched successfully",
                 assignment
@@ -297,7 +308,7 @@ const getAssignmentByID = async (req, res) => {
                 role: "teacher"
             })
             if (!teacherEnrollment) return res.status(403).json({ message: "You're not assigned to teach this course" })
-
+            await client.set(cacheKey, JSON.stringify(assignment), "EX", 300)
             return res.status(200).json({
                 message: "Assignment fetched successfully",
                 assignment
@@ -314,7 +325,7 @@ const getAssignmentByID = async (req, res) => {
                 role: "student"
             })
             if (!studentEnrollment) return res.status(403).json({ message: "You're not enrolled in this course" })
-
+            await client.set(cacheKey, JSON.stringify(assignment), "EX", 300)
             return res.status(200).json({
                 message: "Assignment fetched successfully",
                 assignment
