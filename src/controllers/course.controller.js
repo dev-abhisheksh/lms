@@ -193,70 +193,59 @@ const getMyCourse = async (req, res) => {
 const getCourseById = async (req, res) => {
     try {
         const { courseId } = req.params;
-        if (!courseId) return res.status(400).json({ message: "CourseID is required" })
+        const role = req.user.role
+        const userId = req.user._id
+
+        if (!courseId) return res.status(400).json({ message: "CoueseID is required" })
+
+        const cacheKey = `courseById:${courseId}:${role}:${userId || "none"}`
+        const cached = await client.get(cacheKey)
+        if (cached) {
+            return res.status(200).json({
+                message: "Course fetched successfully",
+                course: JSON.parse(cached)
+            })
+        }
 
         const course = await Course.findById(courseId)
             .populate("department", "name code isActive")
-            .populate("createdBy", "fullName email username")
+            .populate("createdBy", "fullName username email")
             .populate({
                 path: "modules",
                 select: "title",
                 populate: { path: "lessons", select: "title" }
             })
 
-        if (!course) return res.status(404).json({ message: "Course Not found" })
+        if (!course) return res.status(404).json({ message: "Course not found" })
 
-        const department = course.department;
-
-        //only admins
-        if (req.user.role === "admin") {
-            return res.status(200).json({
-                message: "Course fetched successfully",
-                course
-            })
+        const department = course?.department
+        if (!department?.isActive && role !== "admin") {
+            return res.status(403).json({ message: "Department is not active" })
         }
 
-        if (!department?.isActive) return res.status(403).json({ message: "Department is inActive" })
-
-        const enrollment = await CourseEnrollment.findOne({
-            user: req.user._id,
+        const enrollment = await CourseEnrollment({
+            user: userId,
             course: courseId
         })
 
-        if (req.user.role === "teacher") {
-            if (!enrollment || enrollment.role !== "teacher") {
-                return res.status(403).json({ message: "You're not assigned to teach this course" })
-            }
-            return res.status(200).json({
-                message: "Course fetched successfully",
-                course
-            })
-        }
+        let isAuthorized = false;
 
-        if (req.user.role === "student") {
-            if (!enrollment || enrollment.role !== "student") {
-                return res.status(403).json({ message: "You're not enrolled in this course" })
-            }
+        if (role === "admin") isAuthorized = true
+        else if (role === "teacher" && enrollment?.role === "teacher") isAuthorized = true
+        else if (role === "student" && enrollment?.role === "student" && course.isPublished) isAuthorized = true
+        else if (role === "manager") isAuthorized = true
 
-            if (!course.isPublished) return res.status(403).json({ message: "Course is not published yet" })
+        if (!isAuthorized) return res.status(403).json({ message: "Not authorized to view this course" })
 
-            return res.status(200).json({
-                message: "Course fetched successfully",
-                course
-            })
-        }
+        await client.set(cacheKey, JSON.stringify(course), "EX", 300)
 
-        if (req.user.role === "manager") {
-            return res.status(200).json({
-                message: "Course fetches successfully",
-                course
-            })
-        }
-
-        return res.status(403).json({ message: "Not authorized" })
+        return res.status(200).json({
+            message: "Course fetched successfully",
+            course
+        })
     } catch (error) {
-        console.error("Failed to fetch course", error)
-        return res.status(500).json({ message: "Failed to fetch course" })
+        console.error("Failed to fetch course:", error);
+        return res.status(500).json({ message: "Failed to fetch course" });
     }
 }
 
