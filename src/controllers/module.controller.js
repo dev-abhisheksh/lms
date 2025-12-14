@@ -2,6 +2,7 @@ import { Course } from "../models/course.model.js";
 import { CourseEnrollment } from "../models/courseEnrollment.model.js";
 import { Module } from "../models/module.model.js";
 import { Lesson } from "../models/lesson.model.js"
+import { client } from "../utils/redisClient.js";
 
 const createModule = async (req, res) => {
     try {
@@ -52,7 +53,18 @@ const getAllModules = async (req, res) => {
         const { courseId } = req.params;
         if (!courseId) return res.status(400).json({ message: "CourseID is required" })
 
-        const course = await Course.findById(courseId)
+        const cacheKey = `allModules:${courseId}:${req.user.role}`
+        const cached = await client.get(cacheKey)
+        if (cached) {
+            const parsed = JSON.parse(cached)
+            return res.status(200).json({
+                message: "Fetched all modules",
+                count: parsed.length,
+                modules: parsed
+            })
+        }
+
+        let course = await Course.findById(courseId)
             .populate("department", "name code isActive")
         if (!course) return res.status(404).json({ message: "Course not found" })
 
@@ -60,6 +72,7 @@ const getAllModules = async (req, res) => {
         const modules = await Module.find({ course: courseId })
 
         if (req.user.role === "admin") {
+            await client.set(cacheKey, JSON.stringify(modules), "EX", 1000)
             return res.status(200).json({
                 message: `Fetched all modules for course: ${course?.title}`,
                 count: modules.length,
@@ -72,6 +85,7 @@ const getAllModules = async (req, res) => {
         modules = modules.filter(m => m.isActive)
         //manager validations
         if (req.user.role === "manager") {
+            await client.set(cacheKey, JSON.stringify(modules), "EX", 1000)
             return res.status(200).json({
                 message: `Fetched all modules for course: ${course?.title}`,
                 count: modules.length,
@@ -87,7 +101,7 @@ const getAllModules = async (req, res) => {
                 role: "teacher"
             })
             if (!enrolledTeacher) return res.status(403).json({ message: "You're not assigned to tech this course" })
-
+            await client.set(cacheKey, JSON.stringify(modules), "EX", 1000)
             return res.status(200).json({
                 message: `Fetched all modules for course: ${course?.title}`,
                 count: modules.length,
@@ -105,7 +119,7 @@ const getAllModules = async (req, res) => {
         })
 
         if (!enrolledStudent) return res.status(403).json({ message: "You're not enrolled in this course" })
-
+        await client.set(cacheKey, JSON.stringify(modules), "EX", 1000)
         return res.status(200).json({
             message: `Fetched all modules for course: ${course?.title}`,
             count: modules.length,
