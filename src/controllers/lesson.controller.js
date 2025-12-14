@@ -195,6 +195,15 @@ const getLessonById = async (req, res) => {
         const { lessonId } = req.params;
         if (!lessonId) return res.status(400).json({ message: "LessonId is required" })
 
+        const cacheKey = `lessonsById:${lessonId}:${req.user.role}:${req.user._id || "none"}`
+        const cached = await client.get(cacheKey)
+        if (cached) {
+            return res.status(200).json({
+                message: "Fetched lesson",
+                lesson: JSON.parse(cached)
+            })
+        }
+
         const lesson = await Lesson.findById(lessonId)
             .populate("module", "title isActive")
             .populate({
@@ -213,6 +222,7 @@ const getLessonById = async (req, res) => {
         const department = lesson?.course?.department
 
         if (req.user.role === "admin") {
+            await client.set(cacheKey, JSON.stringify(lesson), "EX", 500)
             return res.status(200).json({
                 message: "Fetched lesson bt ID",
                 lesson
@@ -223,6 +233,7 @@ const getLessonById = async (req, res) => {
         if (!module?.isActive) return res.status(403).json({ message: "Module is deleted" })
 
         if (req.user.role === "manager") {
+            await client.set(cacheKey, JSON.stringify(lesson), "EX", 500)
             return res.status(200).json({
                 message: "Fetched lesson bt ID",
                 lesson
@@ -236,7 +247,7 @@ const getLessonById = async (req, res) => {
                 role: "teacher"
             })
             if (!enrolledTeacher) return res.status(403).json({ message: "You're not assigned to teach this course" })
-
+            await client.set(cacheKey, JSON.stringify(lesson), "EX", 500)
             return res.status(200).json({
                 message: "Fetched lesson bt ID",
                 lesson
@@ -252,8 +263,9 @@ const getLessonById = async (req, res) => {
             role: "student"
         })
         if (!enrolledStudent) return res.status(403).json({ message: "You're not enrolled in this course" })
-
+        await client.set(cacheKey, JSON.stringify(lesson), "EX", 500)
         return res.status(200).json({
+
             message: "Fetched lesson bt ID",
             lesson
         })
