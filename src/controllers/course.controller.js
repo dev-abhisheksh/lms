@@ -316,6 +316,12 @@ const updateCourse = async (req, res) => {
             { new: true }
         )
 
+        const courseIdStr = courseId.toString()
+        await delRedisCache(client, [
+            `courses:*`,
+            `courseById:${courseIdStr}:*`
+        ])
+
         return res.status(200).json({
             message: "Course updated successfully",
             course: updatedCourse
