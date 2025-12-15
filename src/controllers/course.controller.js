@@ -1,7 +1,6 @@
 import { Course } from "../models/course.model.js";
 import { CourseEnrollment } from "../models/courseEnrollment.model.js";
 import { Department } from "../models/department.model.js";
-import { Module } from "../models/module.model.js";
 import { uploadToCloudinary } from "../utils/cloudinary.js";
 import { client } from "../utils/redisClient.js";
 
