@@ -13,7 +13,7 @@ const delRedisCache = async (client, patterns) => {
         do {
             const [next, keys] = await client.scan(cursor, "MATCH", pattern, "COUNT", 100)
             if (keys.length > 0) {
-                await client.del(keys)
+                await client.del(...keys)
                 totalDeleted += keys.length
             }
             cursor = next;
@@ -95,7 +95,7 @@ const getAllModules = async (req, res) => {
         if (!course) return res.status(404).json({ message: "Course not found" })
 
         const department = course?.department;
-        const modules = await Module.find({ course: courseId })
+        let modules = await Module.find({ course: courseId })
 
         if (req.user.role === "admin") {
             await client.set(cacheKey, JSON.stringify(modules), "EX", 1000)
@@ -168,7 +168,7 @@ const getModuleById = async (req, res) => {
         if (cached) {
             return res.status(200).json({
                 message: "Module fetched successfully",
-                module: cached
+                module: JSON.parse(cached)
             })
         }
 
@@ -258,8 +258,11 @@ const updateModule = async (req, res) => {
 
             if (!updatedModule) return res.status(404).json({ message: "Module not found" })
             const courseId = updatedModule?.course
-            const pattern = `allModules:${courseId}:*`
-            await delRedisCache(client, pattern)
+
+            await delRedisCache(client, [
+                `allModules:${courseId}:*`,
+                `moduleById:${updatedModule._id}:*`
+            ])
 
             return res.status(200).json({
                 message: "Module updated successfully",
@@ -299,9 +302,10 @@ const updateModule = async (req, res) => {
         )
 
         if (!updatedModule) return res.status(404).json({ message: "Module not found" });
-
-        const pattern = `allModules:${course}:*`
-        await delRedisCache(client, pattern)
+        await delRedisCache(client, [
+            `allModules:${course._id}:*`,
+            `moduleById:${updatedModule._id}:*`
+        ])
 
         return res.status(200).json({
             message: "Module updated successfully",
@@ -358,14 +362,16 @@ const deleteModule = async (req, res) => {
                     }
                 }
             }
-            await Lesson.findByIdAndDelete(lessons._id)
+            await Lesson.findByIdAndDelete(lesson._id)
         }
 
         await Module.findByIdAndDelete(moduleId)
 
         const courseID = lessons?.course
-        const patterns = `allModules:${courseID}:*`
-        await delRedisCache(client, patterns)
+            await delRedisCache(client, [
+                `allModules:${courseID}:*`,
+                `moduleById:${moduleId}:*`
+            ])
 
         return res.status(200).json({ message: "Module and all related lessons deleted permanently" })
 
