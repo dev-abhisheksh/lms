@@ -4,10 +4,10 @@ import authorizeRoles from "../middlewares/role.middleware.js";
 import { assignUserToCourse, getAllEnrollmentsForCourse, getCourseEnrollmentsSummary, getMyEnrollments, removeUserFromCourse } from "../controllers/courseEnrollment.controller.js";
 const router = express.Router();
 
-router.post("/new/:courseId", verifyJWT, authorizeRoles("admin", "manager"), assignUserToCourse);
+router.post("/new/:courseId", verifyJWT, authorizeRoles("admin", "manager"), rateLimiter({ keyPrefix: "createEnrollment", limit: 30, windowSec: 60 }), assignUserToCourse);
 router.get("/participants/:courseId", verifyJWT, authorizeRoles("admin", "teacher"), getAllEnrollmentsForCourse)
 router.get("/my-enrollments", verifyJWT, getMyEnrollments)
-router.delete("/remove/:courseId", verifyJWT, authorizeRoles("admin", "manager"), removeUserFromCourse)
-router.get("/summary/:courseId", verifyJWT, authorizeRoles("admin", "manager", "teacher"), getCourseEnrollmentsSummary)
+router.delete("/remove/:courseId", verifyJWT, authorizeRoles("admin", "manager"), rateLimiter({ keyPrefix: "deleteEnrollment", limit: 30, windowSec: 60 }), removeUserFromCourse)
+router.get("/summary/:courseId", verifyJWT, authorizeRoles("admin", "manager", "teacher"), rateLimiter({ keyPrefix: "summaryCourse", limit: 15, windowSec: 60 }), getCourseEnrollmentsSummary)
 
 export default router;
