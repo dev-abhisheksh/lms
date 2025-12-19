@@ -1,5 +1,15 @@
 import { generateWithGemini } from "../services/ai/gemini.service.js";
 import { enhanceAssignmentDescriptionPrompt, enhanceCourseDescriptionPrompt, enhanceLessonDescriptionPrompt, enhanceModuleDescriptionPrompt, moduleDescriptionPrompt, reWriteAssignemtQuestionPrompt } from "../services/ai/prompts.js";
+import { client } from "../utils/redisClient.js";
+import crypto from "crypto";
+
+const hashText = (text) => {
+    return crypto
+        .createHash("sha256")
+        .update(text)
+        .digest("hex");
+};
+
 
 const generateModuleDescription = async (req, res) => {
     try {
@@ -44,6 +54,15 @@ const enhanceDescription = async (req, res) => {
         const { type, description } = req.body
         if (!type || !description) return res.status(400).json({ message: "Both fields are required" })
 
+        const cacheKey = `ai:enhance:${type}:${hashText(description)}`
+        const cached = await client.get(cacheKey)
+        if (cached) {
+            return res.status(200).json({
+                enhancedDescription: cached,
+                fromCache: true
+            });
+        }
+
         const text = description.trim()
 
         if (text.length < 10) {
@@ -79,11 +98,14 @@ const enhanceDescription = async (req, res) => {
 
         const enhaced = await generateWithGemini(prompt)
 
+        await client.set(cacheKey, enhaced, "EX", 60 * 60 * 24)
+
         res.status(200).json({
-            enhanceDescription: enhaced
+            enhanceDescription: enhaced,
+            fromCache: false
         })
     } catch (error) {
-        console.error(err.message);
+        console.error(error.message);
         res.status(500).json({ message: "AI enhancement failed" });
     }
 }
