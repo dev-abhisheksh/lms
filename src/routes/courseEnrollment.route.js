@@ -2,6 +2,8 @@ import express from "express";
 import verifyJWT from "../middlewares/auth.midleware.js";
 import authorizeRoles from "../middlewares/role.middleware.js";
 import { assignUserToCourse, getAllEnrollmentsForCourse, getCourseEnrollmentsSummary, getMyEnrollments, removeUserFromCourse } from "../controllers/courseEnrollment.controller.js";
+import rateLimiter from "../middlewares/rateLimiter.js";
+
 const router = express.Router();
 
 router.post("/new/:courseId", verifyJWT, authorizeRoles("admin", "manager"), rateLimiter({ keyPrefix: "createEnrollment", limit: 30, windowSec: 60 }), assignUserToCourse);

@@ -9,10 +9,10 @@ router.post("/create", verifyJWT, authorizeRoles("admin"), rateLimiter({ keyPref
 router.get("/", verifyJWT, getAllDepartments)
 router.get("/:departmentId", verifyJWT, getDepartmentById)
 
-router.get("/toggle-department/:departmentId", verifyJWT, authorizeRoles("admin"), ratel
+router.get("/toggle-department/:departmentId", verifyJWT, authorizeRoles("admin"), rateLimiter
     ({ keyPrefix: "toggleDepartment", limit: 40, windowSec: 60 }), toggleDepartment)
 
-router.patch("/update/:departmentId", verifyJWT, authorizeRoles("admin"), ratel
+router.patch("/update/:departmentId", verifyJWT, authorizeRoles("admin"), rateLimiter
     ({ keyPrefix: "updateDepartment", limit: 30, windowSec: 60 }), updateDepartment)
 
 export default router;
