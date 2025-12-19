@@ -49,7 +49,7 @@ const enhanceLessonDescription = async (req, res) => {
         return res.status(400).json({ message: "Lesson description is too short to enhance" })
     }
 
-    if (description.trim().length) {
+    if (description.trim().length > 800) {
         return res.status(400).json({ message: "Lesson description is too large for AI Enhancement" })
     }
 
