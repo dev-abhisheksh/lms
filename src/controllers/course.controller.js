@@ -242,7 +242,7 @@ const getCourseById = async (req, res) => {
             return res.status(403).json({ message: "Department is not active" })
         }
 
-        const enrollment = await CourseEnrollment({
+        const enrollment = await CourseEnrollment.findOne({
             user: userId,
             course: courseId
         })
