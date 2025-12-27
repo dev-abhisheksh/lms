@@ -1,6 +1,12 @@
 import Redis from "ioredis";
+import dotenv from "dotenv"
 
-const client = new Redis()
+dotenv.config()
+
+const client = new Redis(process.env.REDIS_URL,{
+    tls: {}
+})
+console.log("REDIS_URL =", process.env.REDIS_URL);
 
 export {
     client

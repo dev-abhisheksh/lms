@@ -19,7 +19,7 @@ const generateAccessToken = (user) => {
             process.env.ACCESS_TOKEN_SECRET
         ),
 
-    { expiresIn: process.env.ACCESS_TOKEN_EXPIRY || "1h" }
+        { expiresIn: process.env.ACCESS_TOKEN_EXPIRY || "1h" }
     )
 }
 
@@ -111,7 +111,29 @@ const loginUser = async (req, res) => {
     }
 }
 
+const logoutUser = async (req, res) => {
+    try {
+        const userId = req.user?._id;
+
+        await User.findByIdAndUpdate(
+            userId,
+            {
+                $unset: { refreshToken: 1 }
+            },
+            { new: true }
+        )
+
+        return res.status(200).json({
+            message: "User LoggedOut successfully"
+        })
+    } catch (error) {
+        console.error("Failed to logout user", error)
+        return res.status(500).json({ message: "Failed to logout user" })
+    }
+}
+
 export {
     registerUser,
-    loginUser
+    loginUser,
+    logoutUser
 }
